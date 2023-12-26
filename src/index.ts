@@ -26,8 +26,8 @@ async function getAWLogs(): Promise<void> {
 		const end = new Date(now);
 		end.setHours(24, 0, 0, 0); // midnight tonight
 
-		// get all periods when the user was active
-		const activePeriods = await getActivePeriods(info.afkBucketID, start, end);
+		// get all periods when the user was active (with a grace period of 15 minutes)
+		const activePeriods = await getActivePeriods(info.afkBucketID, start, end, 15);
 
 		// collect all app usage while the user was active
 		var appPeriods: AppPeriod[] = [];
@@ -113,7 +113,7 @@ interface Period {
 
 // getActivePeriods returns the periods between start and end when the user was active, according to
 // the afk bucket.
-async function getActivePeriods(afkBucketID: string, start: Date, end: Date): Promise<Period[]> {
+async function getActivePeriods(afkBucketID: string, start: Date, end: Date, grace: number): Promise<Period[]> {
 	const events = await getEvents(afkBucketID, start, end);
 
 	let out = events
@@ -131,13 +131,14 @@ async function getActivePeriods(afkBucketID: string, start: Date, end: Date): Pr
 
 	console.debug(`collected ${out.length} active periods:`, out);
 
-	out = mergeOverlapping(out);
+	out = mergeOverlapping(out, grace);
 	console.debug(`merged into ${out.length} active periods:`, out);
 
 	return out;
 }
 
-function mergeOverlapping(periods: Period[]): Period[] {
+// mergeOverlapping merges periods with less than `grace` minutes between them
+function mergeOverlapping(periods: Period[], grace: number): Period[] {
 	if (periods.length === 0) {
 		return periods;
 	}
@@ -147,7 +148,11 @@ function mergeOverlapping(periods: Period[]): Period[] {
 	let currentPeriod = periods[0];
 
 	for (let i = 1; i < periods.length; i++) {
-		if (periods[i].start <= currentPeriod.end) {
+		// add grace period
+		const endPlus5 = currentPeriod.end;
+		endPlus5.setSeconds(endPlus5.getSeconds() + grace * 60);
+
+		if (periods[i].start <= endPlus5) {
 			// If the current period overlaps with the next, merge them.
 			currentPeriod.end = new Date(Math.max(currentPeriod.end.getTime(), periods[i].end.getTime()));
 		} else {
