@@ -5,8 +5,20 @@ joplin.plugins.register({
 	onStart: async function () {
 		await joplin.commands.register({
 			name: 'getAWLogs',
-			label: 'Insert ActivityWatch Logs',
-			execute: getAWLogs,
+			label: 'Insert ActivityWatch logs',
+			execute: async (...args: any[]) => {
+				switch (args.length) {
+					case 0:
+						await getAWLogs(new Date());
+						break;
+					case 1:
+						const d = parseDateOrOffset(args[0]);
+						await getAWLogs(d);
+						break;
+					default:
+						console.error('too many arguments');
+				}
+			},
 		});
 
 		// add to tools menu
@@ -14,16 +26,58 @@ joplin.plugins.register({
 	},
 });
 
-async function getAWLogs(): Promise<void> {
+// parseDateOrOffset returns a Date offset by the number from the current Date if `input` parses to
+// a number. Otherwise, expects a date in the format YYYY-MM-DD or MM-DD, and returns that date.
+function parseDateOrOffset(input: string): Date {
+	const currentDate = new Date();
+
+	// Check if the input is a number (days offset)
+	if (/^-?\d+$/.test(input)) {
+		const daysOffset = parseInt(input);
+		console.debug(`getting data for today + ${daysOffset} days`);
+		currentDate.setDate(currentDate.getDate() + daysOffset);
+		return currentDate;
+	}
+
+	if (!/^(\d\d\d\d-)?\d?\d-\d?\d$/.test(input)) {
+		throw new Error('invalid input format');
+	}
+
+	// If the input is not a number, treat it as a date string
+	const parts = input.split('-').map(part => parseInt(part));
+	let date = new Date();
+	let year: number, month: number, day: number;
+
+	switch (parts.length) {
+		case 3:
+			// YYYY-MM-DD
+			[year, month, day] = parts;
+			break;
+		case 2:
+			// MM-DD
+			[month, day] = parts;
+			year = currentDate.getFullYear();
+			break;
+		default:
+			throw new Error('invalid input format');
+	}
+
+	date.setFullYear(year, month - 1, day);
+
+	console.debug(`getting data for ${year}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`);
+
+	return date;
+}
+
+async function getAWLogs(today: Date): Promise<void> {
 	console.info('requesting logs from ActivityWatch');
 	try {
 		const info = await getBucketInfo();
 		console.info('received bucket info');
 
-		const now = new Date();
-		const start = new Date(now);
+		const start = new Date(today);
 		start.setHours(0, 0, 0, 0); // midnight last night
-		const end = new Date(now);
+		const end = new Date(today);
 		end.setHours(24, 0, 0, 0); // midnight tonight
 
 		// get all periods when the user was active (with a grace period of 15 minutes)
