@@ -35,7 +35,7 @@ async function getAWLogs(): Promise<void> {
 			const apps = await getAppPeriods(info.windowBucketID, period.start, period.end);
 			appPeriods = appPeriods.concat(apps);
 		}
-		console.log(`collected ${appPeriods.length} app usage entries:`, appPeriods);
+		console.debug(`collected ${appPeriods.length} app usage entries:`, appPeriods);
 
 		if (appPeriods.length === 0) {
 			await joplin.commands.execute('insertText', 'No ActivityWatch data :(');
@@ -45,7 +45,7 @@ async function getAWLogs(): Promise<void> {
 
 		// collect usage statistics for each 15 minute period
 		const stats = chunkAppPeriods(appPeriods, 15);
-		console.log('usage stats:', stats);
+		console.debug('usage stats:', stats);
 
 		await joplin.commands.execute('insertText', summarizeUsageStats(stats));
 		console.log('inserted ActivityWatch summary');
@@ -351,7 +351,7 @@ function summarizeUsageStats(stats: UsageStats[]): string {
 
 		const sortedApps = Object.entries(s.apps).sort((a, b) => b[1] - a[1]);
 		for (const [app, duration] of sortedApps) {
-			result += `    - *${formatDuration(duration)}*: ${app}\n`;
+			result += `    - ${formatDuration(duration)}: ${app}\n`;
 		}
 	}
 
