@@ -1,0 +1,21 @@
+name: build
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: set up Node.js
+      uses: actions/setup-node@v3
+      with:
+        cache: 'npm'
+
+    - name: install dependencies
+      run: npm install --ignore-scripts
+
+    - name: build plugin
+      run: npm run dist
