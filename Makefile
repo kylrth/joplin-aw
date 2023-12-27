@@ -19,6 +19,11 @@ setup-env: docker-image
 node_modules: docker-image package.json package-lock.json
 	$(DOCKER_RUN) $(IMG_NAME) npm install --ignore-scripts
 
+# update plugin framework
+.PHONY: setup-env
+node_update:
+	$(DOCKER_RUN) $(IMG_NAME) npm run update
+
 # build plugin
 dist: node_modules
 	$(DOCKER_RUN) $(IMG_NAME)
