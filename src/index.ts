@@ -1,19 +1,56 @@
 import joplin from 'api';
-import { MenuItemLocation } from 'api/types';
+import { MenuItemLocation, SettingItemType } from 'api/types';
 
 joplin.plugins.register({
 	onStart: async function () {
+		// add settings
+		await joplin.settings.registerSection('awMain', {
+			label: 'Joplin AW',
+			iconName: 'fas fa-clock',
+		});
+		await joplin.settings.registerSettings({
+			'periodLength': {
+				value: 15,
+				type: SettingItemType.Int,
+				section: 'awMain',
+				public: true,
+				label: 'Activity summary bucketing period',
+				description: 'The length (in minutes) of the time periods in the activity summary',
+			},
+			'covPercent': {
+				value: 70,
+				type: SettingItemType.Int,
+				section: 'awMain',
+				public: true,
+				label: 'Activity summary period coverage (%)',
+				description: 'Only list the longest activities that together took at least this much of the time period (skipping short activities)',
+			},
+			'minCount': {
+				value: 0,
+				type: SettingItemType.Int,
+				section: 'awMain',
+				public: true,
+				label: 'Minimum # of activities per period',
+				description: 'List at least this many activities per time period (if present), regardless of the period coverage setting'
+			}
+		});
+
+		// add the command
 		await joplin.commands.register({
 			name: 'getAWLogs',
 			label: 'Insert ActivityWatch logs',
 			execute: async (...args: any[]) => {
+				const period = await joplin.settings.value('periodLength');
+				const cov = await joplin.settings.value('covPercent');
+				const minCount = await joplin.settings.value('minCount');
+
 				switch (args.length) {
 					case 0:
-						await getAWLogs(new Date());
+						await getAWLogs(new Date(), period, cov / 100, minCount);
 						break;
 					case 1:
 						const d = parseDateOrOffset(args[0]);
-						await getAWLogs(d);
+						await getAWLogs(d, period, cov / 100, minCount);
 						break;
 					default:
 						console.error('too many arguments');
@@ -69,7 +106,9 @@ function parseDateOrOffset(input: string): Date {
 	return date;
 }
 
-async function getAWLogs(today: Date): Promise<void> {
+async function getAWLogs(
+	today: Date, period: number, covPercent: number, minCount: number,
+): Promise<void> {
 	console.info('requesting logs from ActivityWatch');
 	try {
 		const info = await getBucketInfo();
@@ -80,8 +119,8 @@ async function getAWLogs(today: Date): Promise<void> {
 		const end = new Date(today);
 		end.setHours(24, 0, 0, 0); // midnight tonight
 
-		// get all periods when the user was active (with a grace period of 15 minutes)
-		const activePeriods = await getActivePeriods(info.afkBucketID, start, end, 15);
+		// get all periods when the user was active (with a grace period of the bucketing period)
+		const activePeriods = await getActivePeriods(info.afkBucketID, start, end, period);
 
 		// collect all app usage while the user was active
 		var appPeriods: AppPeriod[] = [];
@@ -97,11 +136,14 @@ async function getAWLogs(today: Date): Promise<void> {
 			return;
 		}
 
-		// collect usage statistics for each 15 minute period
-		const stats = chunkAppPeriods(appPeriods, 15);
+		// collect usage statistics for each period
+		const stats = chunkAppPeriods(appPeriods, period);
 		console.debug('usage stats:', stats);
 
-		await joplin.commands.execute('insertText', summarizeUsageStats(stats));
+		await joplin.commands.execute(
+			'insertText',
+			summarizeUsageStats(stats, period * 60 * covPercent, minCount),
+		);
 		console.log('inserted ActivityWatch summary');
 	} catch (error) {
 		console.error('Error fetching the logs:', error);
@@ -402,15 +444,23 @@ function getUsageStats(periods: AppPeriod[]): { [key: string]: number } {
 	return usage;
 }
 
-function summarizeUsageStats(stats: UsageStats[]): string {
+function summarizeUsageStats(stats: UsageStats[], covSeconds: number, minCount: number): string {
 	let result = '';
 
 	for (const s of stats) {
 		result += `- **${formatTime(s.start)}**\n`;
 
 		const sortedApps = Object.entries(s.apps).sort((a, b) => b[1] - a[1]);
+
+		var count = 0;
+		var tot = 0;
 		for (const [app, duration] of sortedApps) {
 			result += `    - ${formatDuration(duration)}: ${app}\n`;
+			count++;
+			tot += duration;
+			if (count >= minCount && tot >= covSeconds) {
+				break;
+			}
 		}
 	}
 

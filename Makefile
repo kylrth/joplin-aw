@@ -20,10 +20,17 @@ node_modules: docker-image package.json package-lock.json
 	$(DOCKER_RUN) $(IMG_NAME) npm install --ignore-scripts
 
 # update plugin framework
-.PHONY: setup-env
-node_update:
+.PHONY: node-update
+node-update:
 	$(DOCKER_RUN) $(IMG_NAME) npm run update
 
 # build plugin
 dist: node_modules
 	$(DOCKER_RUN) $(IMG_NAME)
+
+# run the built plugin. The first time, you will need to add the path to this repo on your machine
+# to the "Development plugins" field in the Plugins options, under "Show Advanced Settings". From
+# then on, it will load the plugin anew each time this is run.
+.PHONY: run
+run:
+	flatpak run --branch=stable --arch=x86_64 --command='joplin-desktop' --file-forwarding net.cozic.joplin_desktop --env dev
