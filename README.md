@@ -59,4 +59,6 @@ Running the `getAWLogs` command pastes a summary of app usage for every 15 minut
     - 0:00: Firefox: nitter/.github/workflows/build-docker.yml at master · zedeus/nitter
 ```
 
-Currently the 15-minute period is not modifiable, but I might change that later. Feel free to provide feedback by opening an issue here!
+The 15-minute period is modifiable in the plugin's settings page.
+
+Feel free to provide feedback by opening an issue here!
